@@ -1,0 +1,45 @@
+import numpy as np
+from bert4keras.backend import keras, set_gelu
+from bert4keras.tokenizers import Tokenizer
+from bert4keras.models import build_transformer_model
+from bert4keras.optimizers import Adam, extend_with_piecewise_linear_lr
+from bert4keras.snippets import sequence_padding, DataGenerator
+from bert4keras.snippets import open
+from keras.layers import Lambda, Dense
+from sklearn.utils import shuffle
+import random
+import re
+config_path = 'albert_small_zh_google/albert_config.json'
+checkpoint_path = 'albert_small_zh_google/albert_model.ckpt'
+dict_path = 'albert_small_zh_google/vocab.txt'
+bert = build_transformer_model(
+    config_path=config_path,
+    checkpoint_path=checkpoint_path,
+    model='albert',
+    return_keras_model=False,
+)
+
+output = Lambda(lambda x: x[:, 0], name='CLS-token')(bert.model.output)
+output = Dense(
+    units=3,
+    activation='softmax',
+    kernel_initializer=bert.initializer
+)(output)
+
+model = keras.models.Model(bert.model.input, output)
+model.load_weights('best_model.weights')
+tokenizer = Tokenizer(dict_path, do_lower_case=True)
+def input_text(text):
+    batch_token_ids, batch_segment_ids= [], []
+    token_ids, segment_ids = tokenizer.encode(text, maxlen=128)
+    batch_token_ids.append(token_ids)
+    batch_segment_ids.append(segment_ids)
+    batch_token_ids = sequence_padding(batch_token_ids)
+    batch_segment_ids = sequence_padding(batch_segment_ids)
+    return [batch_token_ids, batch_segment_ids]
+def main(text):
+    x_true = input_text(text)
+    y_pred = model.predict(x_true).argmax(axis=1)
+    return y_pred
+if __name__ == "__main__":
+    print(main("招人了，招人了"))
